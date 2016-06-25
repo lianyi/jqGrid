@@ -6011,6 +6011,13 @@
 				}
 			});
 		},
+		resetAllSelection:function(){
+			this.resetSelection();
+			return this.each(function () {
+				var $t = this, $self = $($t), p = $t.p;
+				clearArray(p.selarrrow); // p.selarrrow = [];
+			});
+		},
 		resetSelection: function (rowid) {
 			return this.each(function () {
 				var $t = this, $self = $(this), p = $t.p, row,
