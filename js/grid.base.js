@@ -5034,7 +5034,6 @@
 						if (p.multiPageSelection) {
 							$(ts.rows).each(function () {
 								var idx = p.selarrrow.indexOf(p.idPrefix + this.id);
-								console.info(idx,this.id);
 								idx >= 0 && p.selarrrow.splice(idx, 1);
 							});
 						} else {
