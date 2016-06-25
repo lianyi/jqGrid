@@ -5013,11 +5013,13 @@
 						frozenRows = grid.fbRows,
 						skipClasses = disabledStateClasses + " ui-subgrid jqgroup jqfoot jqgfirstrow jqgskipselect",
 						id, ids = p._index;
-					clearArray(p.selarrrow); // p.selarrrow = [];
+					if (!p.multiPageSelection) {
+						clearArray(p.selarrrow); // p.selarrrow = [];
+					}
 					if (this.checked) {
 						toCheck = true;
 						p.selrow = ts.rows.length > 1 ? ts.rows[ts.rows.length - 1].id : null;
-						if (p.multiPageSelection && (p.datatype === "local" || p.treeGrid)) {
+						if (p.multiPageSelection) {
 							if (p.data != null && p.data.length > 0 && ids != null) {
 								// add to selarrrow all
 								for (id in ids) {
@@ -5029,7 +5031,15 @@
 						}
 					} else {
 						toCheck = false;
-						p.selrow = null;
+						if (p.multiPageSelection) {
+							$(ts.rows).each(function () {
+								var idx = p.selarrrow.indexOf(p.idPrefix + this.id);
+								console.info(idx,this.id);
+								idx >= 0 && p.selarrrow.splice(idx, 1);
+							});
+						} else {
+							p.selrow = null;
+						}
 					}
 					var selArr = toCheck ? p.selarrrow : emp;
 					$(ts.rows).each(function (i) {
@@ -10368,7 +10378,7 @@
 	 * http://www.codeproject.com/KB/scripting/json-filtering.aspx
 	 *
 	 * The filter uses JSON entities to hold filter rules and groups. Here is an example of a filter:
-
+	
 	{ "groupOp": "AND",
 		  "groups" : [
 			{ "groupOp": "OR",
@@ -10382,7 +10392,7 @@
 			{ "field": "name", "op": "eq", "data": "Romania" },
 			{ "field": "id", "op": "le", "data": "1"}
 		  ]
-	}
+}
 	*/
 	// begin module grid.filter
 	$.fn.jqFilter = function (arg) {
@@ -11160,21 +11170,21 @@
 
 	/**
 		The below work is licensed under Creative Commons GNU LGPL License.
-
+	
 		Original work:
-
+	
 		License:     http://creativecommons.org/licenses/LGPL/2.1/
 		Author:      Stefan Goessner/2006
 		Web:         http://goessner.net/
-
+	
 		Modifications made:
-
+	
 		Version:     0.9-p5
 		Description: Restructured code, JSLint validated (no strict whitespaces),
 					 added handling of empty arrays, empty strings, and int/floats values.
 		Author:      Michael Schøler/2008-01-29
 		Web:         http://michael.hinnerup.net/blog/2008/01/26/converting-json-to-xml-and-xml-to-json/
-
+	
 		Description: json2xml added support to convert functions as CDATA
 					 so it will be easy to write characters that cause some problems when convert
 		Author:      Tony Tomov
