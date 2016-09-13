@@ -19,7 +19,7 @@
     }
   ],
   "title": "free jqGrid",
-  "version": "4.13.3",
+  "version": "4.13.5-pre",
   "description": "grid as jQuery plugin - fork of jqGrid before licensing change",
   "main": "js/jquery.jqgrid.src.js",
   "filename": "js/jquery.jqgrid.src.js",
@@ -53,18 +53,18 @@
   },
   "homepage": "https://github.com/free-jqgrid/jqGrid",
   "devDependencies": {
-    "google-closure-compiler": "^20160517.1.0",
+    "google-closure-compiler": "^20160822.1.0",
     "grunt": "^1.0.1",
     "grunt-closure-tools": "^0.9.9",
     "grunt-contrib-clean": "^1.0.0",
     "grunt-contrib-concat": "^1.0.1",
     "grunt-contrib-copy": "^1.0.0",
-    "grunt-contrib-cssmin": "^1.0.1",
+    "grunt-contrib-cssmin": "^1.0.2",
     "grunt-contrib-jshint": "^1.0.0",
-    "grunt-contrib-uglify": "^1.0.1",
+    "grunt-contrib-uglify": "^2.0.0",
     "grunt-contrib-watch": "^1.0.0",
     "grunt-file-append": "^0.0.6",
-    "grunt-jscs": "^3.0.0",
+    "grunt-jscs": "^3.0.1",
     "grunt-newer": "^1.2.0",
     "grunt-replace": "^1.0.1"
   }

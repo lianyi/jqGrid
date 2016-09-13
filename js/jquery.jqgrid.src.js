@@ -2,13 +2,13 @@
 // @compilation_level SIMPLE_OPTIMIZATIONS
 
 /**
- * @license jqGrid 4.13.4-pre - free jqGrid: https://github.com/free-jqgrid/jqGrid
+ * @license jqGrid 4.13.5-pre - free jqGrid: https://github.com/free-jqgrid/jqGrid
  * Copyright (c) 2008-2014, Tony Tomov, tony@trirand.com
  * Copyright (c) 2014-2016, Oleg Kiriljuk, oleg.kiriljuk@ok-soft-gmbh.com
  * Dual licensed under the MIT and GPL licenses
  * http://www.opensource.org/licenses/mit-license.php
  * http://www.gnu.org/licenses/gpl-2.0.html
- * Date: 2016-06-17
+ * Date: 2016-09-05
  */
 //jsHint options
 /*jshint eqnull:true */
@@ -353,7 +353,7 @@
 
 	$.extend(true, jgrid, {
 		/** @const */
-		version: "4.13.4-pre",
+		version: "4.13.5-pre",
 		/** @const */
 		productName: "free jqGrid",
 		defaults: {},
@@ -1247,11 +1247,11 @@
 			}
 			switch (componentName) {
 				case COMPONENT_NAMES.BODY_TABLE: // get body table from bDiv
-					return $p.hasClass("ui-jqgrid-bdiv") ? $p.find(">div>.ui-jqgrid-btable") : $();
+					return $p.hasClass("ui-jqgrid-bdiv") ? $p.children("div").children(".ui-jqgrid-btable") : $();
 				case COMPONENT_NAMES.HEADER_TABLE: // header table from bDiv
-					return $p.hasClass("ui-jqgrid-hdiv") ? $p.find(">div>.ui-jqgrid-htable") : $();
+					return $p.hasClass("ui-jqgrid-hdiv") ? $p.children("div").children(".ui-jqgrid-htable") : $();
 				case COMPONENT_NAMES.FOOTER_TABLE: // footer/summary table from sDiv
-					return $p.hasClass("ui-jqgrid-sdiv") ? $p.find(">div>.ui-jqgrid-ftable") : $();
+					return $p.hasClass("ui-jqgrid-sdiv") ? $p.children("div").children(".ui-jqgrid-ftable") : $();
 				case COMPONENT_NAMES.FROZEN_HEADER_TABLE: // header table from bDiv
 					return $p.hasClass("ui-jqgrid-hdiv") ? $p.children(".ui-jqgrid-htable") : $();
 				case COMPONENT_NAMES.FROZEN_FOOTER_TABLE: // footer/summary table from sDiv
@@ -2079,6 +2079,21 @@
 						_sorting.push({ by: by, dir: dir, type: stype, datefmt: dfmt, sfunc: sfunc });
 						return self;
 					};
+					this.inSet = function (f, v, t) {
+						var val = v === undefined ? null : v,
+							swst = t.stype === undefined ? "text" : t.stype;
+
+						val = self._getStr("\"" + self._toStr(val) + "\"");
+						if (swst !== "text") {
+							// NOT yet implemented
+							return self._compareValues(self.equals, f, v, "==", t);
+						}
+
+						self._append("jQuery.inArray(" + self._getStr(f) + "," + val + ".split(',')) >= 0");
+						self._setCommand(self.inSet, f);
+						self._resetNegate();
+						return self;
+					};
 					this.custom = function (ruleOp, field, data) {
 						self._append("self.p.customSortOperations." + ruleOp + ".filter.call(self,{item:this,cmName:\"" + field + "\",searchValue:\"" + data + "\"})");
 						self._setCommand(self.custom, field);
@@ -2236,13 +2251,15 @@
 					return "<td role='gridcell' " + formatCol(pos, irow, v, srvr, rowId, rdata) + ">" + v + "</td>";
 				},
 				addMulti = function (rowid, pos, irow, checked, item) {
-					var checkboxHtml = "&nbsp;", hasCbox = true;
+					var checkboxHtml = "&nbsp;", hasCbox = true,
+						callbackParams = { rowid: rowid, iRow: irow, iCol: pos, data: item, checked: checked };
 					if ($.isFunction(p.hasMultiselectCheckBox)) {
-						hasCbox = p.hasMultiselectCheckBox.call(self,
-								{ rowid: rowid, iRow: irow, iCol: pos, data: item });
+						hasCbox = p.hasMultiselectCheckBox.call(self, callbackParams);
 					}
 					if (hasCbox) {
-						checkboxHtml = "<input type='checkbox'" + " id='jqg_" + p.id + "_" + rowid +
+						checkboxHtml = $.isFunction(p.checkboxHtml) ?
+							p.checkboxHtml.call(self, callbackParams) :
+							"<input type='checkbox' id='jqg_" + p.id + "_" + rowid +
 							"' class='cbox' name='jqg_" + p.id + "_" + rowid + "'" +
 							(checked ? " checked='checked' aria-checked='true'" : " aria-checked='false'") + "/>";
 					}
@@ -2270,6 +2287,8 @@
 					} else {
 						selr = (idr === p.selrow);
 					}
+				} else {
+					selr = false;
 				}
 				iStartTrTag = rowData.length;
 				rowData.push(""); // it will be replaced. See rowData[iStartTrTag] below
@@ -3916,8 +3935,8 @@
 							"bn": function (queryObj, op) { return op === "OR" ? queryObj.orNot().startsWith : queryObj.andNot().startsWith; },
 							"en": function (queryObj, op) { return op === "OR" ? queryObj.orNot().endsWith : queryObj.andNot().endsWith; },
 							"ew": function (queryObj) { return queryObj.endsWith; },
-							"ni": function (queryObj, op) { return op === "OR" ? queryObj.orNot().equals : queryObj.andNot().equals; },
-							"in": function (queryObj) { return queryObj.equals; },
+							"ni": function (queryObj, op) { return op === "OR" ? queryObj.orNot().inSet : queryObj.andNot().inSet; },
+							"in": function (queryObj) { return queryObj.inSet; },
 							"nu": function (queryObj) { return queryObj.isNull; },
 							"nn": function (queryObj, op) { return op === "OR" ? queryObj.orNot().isNull : queryObj.andNot().isNull; }
 						},
@@ -6085,29 +6104,29 @@
 			}
 			options = options || {};
 			this.each(function () {
-				var $t = this, p = $t.p, getall = false, ind, len = 2, j = 0, rows = $t.rows, i, $td, cm, nm, td;
+				var $t = this, p = $t.p, getall = false, tr, len = 1, j, rows = $t.rows, i, $td, cm, nm, td;
 				if (rowid === undefined) {
 					getall = true;
 					resall = [];
 					len = rows.length;
 				} else {
-					ind = base.getGridRowById.call($($t), rowid);
-					if (!ind) { return res; }
+					tr = base.getGridRowById.call($($t), rowid);
+					if (!tr) { return res; }
 				}
-				while (j < len) {
-					if (getall) { ind = rows[j]; }
-					if ($(ind).hasClass("jqgrow")) {
-						$td = $("td[role=gridcell]", ind);
+				for (j = 0; j < len; j++) {
+					if (getall) { tr = rows[j]; }
+					if ($(tr).hasClass("jqgrow")) {
+						$td = $(tr).find("td[role=gridcell]");
 						for (i = 0; i < $td.length; i++) {
 							cm = p.colModel[i];
 							nm = cm.name;
-							if (nm !== "cb" && nm !== "subgrid" && nm !== "rn" && cm.formatter !== "actions" && (!options.skipHidden || !cm.hidden)) {
+							if ($.inArray(nm, p.reservedColumnNames) < 0 && cm.formatter !== "actions" && (!options.skipHidden || !cm.hidden)) {
 								td = $td[i];
 								if (p.treeGrid === true && nm === p.ExpandColumn) {
 									res[nm] = htmlDecode($("span", td).first().html());
 								} else {
 									try {
-										res[nm] = $.unformat.call($t, td, { rowId: ind.id, colModel: cm }, i);
+										res[nm] = $.unformat.call($t, td, { rowId: tr.id, colModel: cm }, i);
 									} catch (exception) {
 										res[nm] = htmlDecode($(td).html());
 									}
@@ -6115,11 +6134,13 @@
 							}
 						}
 						if (options.includeId && (p.keyName === false || res[p.keyName] == null)) {
-							res[p.prmNames.id] = stripPref(p.idPrefix, ind.id);
+							res[p.prmNames.id] = stripPref(p.idPrefix, tr.id);
 						}
-						if (getall) { resall.push(res); res = {}; }
+						if (getall) {
+							resall.push(res);
+							res = {};
+						}
 					}
-					j++;
 				}
 			});
 			return resall || res;
@@ -7546,9 +7567,9 @@
 		},
 		saveCell: function (iRow, iCol) {
 			return this.each(function () {
-				var $t = this, $self = $($t), p = $t.p, infoDialog = jgrid.info_dialog, jqID = jgrid.jqID;
+				var $t = this, $self = $($t), p = $t.p, grid = $t.grid, infoDialog = jgrid.info_dialog, jqID = jgrid.jqID;
 
-				if (!$t.grid || p.cellEdit !== true) {
+				if (!grid || p.cellEdit !== true) {
 					return;
 				}
 				var errors = $self.jqGrid("getGridRes", "errors"), errcap = errors.errcap,
@@ -7604,7 +7625,7 @@
 								if (p.cellurl) {
 									var postdata = {};
 									postdata[nm] = v;
-									var opers = p.prmNames, idname = opers.id, oper = opers.oper, hDiv = $t.grid.hDiv;
+									var opers = p.prmNames, idname = opers.id, oper = opers.oper;
 									postdata[idname] = jgrid.stripPref(p.idPrefix, rowid);
 									postdata[oper] = opers.editoper;
 									postdata = $.extend(addpost, postdata);
@@ -7615,16 +7636,15 @@
 											}
 										});
 									}
-									$self.jqGrid("progressBar", { method: "show", loadtype: p.loadui, htmlcontent: jgrid.defaults.savetext || "Saving..." });
-									hDiv.loading = true;
+									$self.jqGrid("progressBar", { method: "show", loadtype: p.loadui, htmlcontent: $self.jqGrid("getGridRes", "defaults.savetext") || "Saving..." });
+									grid.hDiv.loading = true;
 									$.ajax($.extend({
 										url: $.isFunction(p.cellurl) ? p.cellurl.call($t, p.cellurl, iRow, iCol, rowid, v, nm) : p.cellurl,
 										//data :$.isFunction(p.serializeCellData) ? p.serializeCellData.call($t, postdata) : postdata,
 										data: jgrid.serializeFeedback.call($t, p.serializeCellData, "jqGridSerializeCellData", postdata),
 										type: "POST",
 										complete: function (jqXHR) {
-											$self.jqGrid("progressBar", { method: "hide", loadtype: p.loadui });
-											hDiv.loading = false;
+											grid.endReq.call($t);
 											if ((jqXHR.status < 300 || jqXHR.status === 304) && (jqXHR.status !== 0 || jqXHR.readyState !== 4)) {
 												var ret = $self.triggerHandler("jqGridAfterSubmitCell", [$t, jqXHR, postdata.id, nm, v, iRow, iCol]) || [true, ""];
 												if (ret == null || ret === true || (ret[0] === true && $.isFunction(p.afterSubmitCell))) {
@@ -7643,8 +7663,6 @@
 											}
 										},
 										error: function (jqXHR, textStatus, errorThrown) {
-											$("#lui_" + jqID(p.id)).hide();
-											hDiv.loading = false;
 											$self.triggerHandler("jqGridErrorCell", [jqXHR, textStatus, errorThrown]);
 											if ($.isFunction(p.errorCell)) {
 												p.errorCell.call($t, jqXHR, textStatus, errorThrown);
@@ -8906,7 +8924,7 @@
 						$(p.pager).remove();
 					}
 					try {
-						$("#alertmod_" + p.idSel).remove();
+						$("#alertmod_" + jqID(p.id)).remove();
 						$(self).jqGrid("clearBeforeUnload");
 						$(p.gBox).remove();
 					} catch (ignore) { }
@@ -9012,7 +9030,7 @@
 					hoverClasses = getGuiStyles.call($t, "states.hover"),
 					highlightClass = getGuiStyles.call($t, "states.select"),
 					dataFieldClass = getGuiStyles.call($t, "filterToolbar.dataField"),
-					currentFilters,
+					currentFilters = {},
 					getId = function (cmName) {
 						var prefix = "gs_";
 						switch (o.idMode) {
@@ -9734,7 +9752,9 @@
 							if (newFilters.hasOwnProperty(cmName)) {
 								filter = newFilters[cmName];
 								$input = $(getIdSel(cmName));
-								if ($.trim($input.val()) !== filter.data) {
+								if ($input[0].tagName.toUpperCase() === "SELECT" && $input[0].multiple) {
+									$input.val(filter.data.split(","));
+								} else if ($.trim($input.val()) !== filter.data) {
 									$input.val(filter.data);
 								}
 								$searchOper = $input.closest(".ui-search-input")
@@ -9817,7 +9837,7 @@
 			}, o || {});
 			return this.each(function () {
 				this.p.groupHeader = o;
-				var ts = this, i, cmi, skip = 0, $tr, $colHeader, th, $th, thStyle, iCol, cghi, numberOfColumns, titleText, cVisibleColumns, cColumns,
+				var ts = this, i, cmi, skip = 0, $tr, $colHeader, th, $th, thStyle, iCol, cghi, numberOfColumns, titleText, cVisibleColumns,
 					p = ts.p, colModel = p.colModel, cml = colModel.length, ths = ts.grid.headers, $theadInTable, thClasses,
 					$htable = $("table.ui-jqgrid-htable", ts.grid.hDiv), isCellClassHidden = jgrid.isCellClassHidden,
 					$trLabels = $htable.children("thead").children("tr.ui-jqgrid-labels"),
@@ -9829,14 +9849,14 @@
 				} else {
 					$firstHeaderRow.empty();
 				}
-				var inColumnHeader = function (text, columnHeaders) {
-					var length = columnHeaders.length, j;
-					for (j = 0; j < length; j++) {
-						if (columnHeaders[j].startColumnName === text) {
-							return j;
+				var inColumnHeader = function (cmName, columnHeaders) {
+					var j;
+					for (j = 0; j < columnHeaders.length; j++) {
+						if (columnHeaders[j].startColumnName === cmName) {
+							return columnHeaders[j];
 						}
 					}
-					return -1;
+					return 0; // falsy value
 				};
 
 				$(ts).prepend($thead);
@@ -9852,15 +9872,13 @@
 
 					th.style.width = ""; // remove unneeded style
 					thClasses = getGuiStyles.call(ts, "colHeaders", "ui-th-column-header ui-th-" + p.direction + " " + (o.applyLabelClasses ? cmi.labelClasses || "" : ""));
-					iCol = inColumnHeader(cmi.name, o.groupHeaders);
-					if (iCol >= 0) {
-						cghi = o.groupHeaders[iCol];
+					cghi = inColumnHeader(cmi.name, o.groupHeaders);
+					if (cghi) {
 						numberOfColumns = cghi.numberOfColumns;
 						titleText = cghi.titleText;
 
 						// caclulate the number of visible columns from the next numberOfColumns columns
-						for (cVisibleColumns = 0, iCol = 0, cColumns = 0; iCol < numberOfColumns && (i + iCol < cml); iCol++) {
-							cColumns++;
+						for (cVisibleColumns = 0, iCol = 0; iCol < numberOfColumns && (i + iCol < cml); iCol++) {
 							if (!colModel[i + iCol].hidden && !isCellClassHidden(colModel[i + iCol].classes)) {
 								cVisibleColumns++;
 							}
@@ -9873,8 +9891,8 @@
 							.addClass(thClasses)
 							.css({ "height": "22px", "border-top": "0 none" })
 							.html(titleText);
-						if (cColumns > 1) {
-							$colHeader.attr("colspan", String(cColumns));
+						if (cVisibleColumns > 0) {
+							$colHeader.attr("colspan", String(cVisibleColumns));
 						}
 						if (p.headertitles) {
 							$colHeader.attr("title", $colHeader.text());
@@ -9893,11 +9911,6 @@
 						if (skip === 0) {
 							if (o.useColSpanStyle) {
 								// expand the header height to two rows
-								//
-								// !!! TODO: The value of rowspan could be too high
-								// in case of calling setGroupHeaders MULTIPLE times
-								// To calculate correct value one have to analyse the
-								// rows ABOVE the current one
 								$th.attr("rowspan", $trLabels.length + 1);
 							} else {
 								$("<th>")
@@ -10743,6 +10756,7 @@
 							getCmInfo(columns.cmName),
 							{ id: jgrid.randId(), name: columns.name, mode: "search" }
 						);
+					searchoptions.column = columns; // add reference to that.p.columns[k];
 					if (isIE && columns.inputtype === "text") {
 						if (!searchoptions.size) {
 							searchoptions.size = 10;
@@ -10839,8 +10853,9 @@
 				var editoptions = $.extend({}, cm.editoptions || {});
 				delete editoptions.readonly;
 				delete editoptions.disabled;
-				var ruleDataInput = jgrid.createEl.call($t, cm.inputtype,
-						$.extend({}, editoptions, cm.searchoptions || {}, getCmInfo(cm.cmName), { id: jgrid.randId(), name: cm.name }),
+				var searchoptions = $.extend({}, editoptions, cm.searchoptions || {}, getCmInfo(cm.cmName), { id: jgrid.randId(), name: cm.name });
+				searchoptions.column = cm;
+				var ruleDataInput = jgrid.createEl.call($t, cm.inputtype, searchoptions,
 						rule.data, true, that.p.ajaxSelectOptions || {}, true);
 				if (rule.op === "nu" || rule.op === "nn") {
 					$(ruleDataInput).attr("readonly", "true");
@@ -11587,7 +11602,7 @@
 					}
 				}
 				if ($(themodalSelector)[0] !== undefined) {
-					showFilter($("#fbox_" + p.idSel));
+					showFilter($("#fbox_" + jqID(p.id)));
 				} else {
 					var fil = $("<div><div id='" + fid + "' class='" +
 						getGuiStyles.call($t, "dialog.body", "searchFilter") +
@@ -11865,7 +11880,9 @@
 							viewPagerButtons: true,
 							overlayClass: getGuiStyles.call(this, "overlay"),
 							removemodal: true,
-							skipPostTypes: ["image", "file"]
+							skipPostTypes: ["image", "file"],
+							saveui: "enable",
+							savetext: getGridRes.call($self, "defaults.savetext") || "Saving..."
 						},
 						getGridRes.call($self, "edit"),
 						jgrid.edit,
@@ -12318,6 +12335,7 @@
 									"jqGridAddEditSerializeEditData",
 									postdata),
 								complete: function (jqXHR, textStatus) {
+									$self.jqGrid("progressBar", { method: "hide", loadtype: o.saveui });
 									$("#sData", frmtb2).removeClass(activeClass);
 									postdata[idname] = $("#id_g", frmtb).val();
 									if ((jqXHR.status >= 300 && jqXHR.status !== 304) || (jqXHR.status === 0 && jqXHR.readyState === 4)) {
@@ -12426,6 +12444,7 @@
 							}
 						}
 						if (ret[0]) {
+							$self.jqGrid("progressBar", { method: "show", loadtype: o.saveui, htmlcontent: o.savetext });
 							if (o.useDataProxy) {
 								var dpret = p.dataProxy.call($t, ajaxOptions, "set_" + gridId);
 								if (dpret === undefined) {
@@ -15045,7 +15064,7 @@
 								postData),
 						type: isFunction(o.mtype) ? o.mtype.call($t, editOrAdd, o, postData[idname], postData) : o.mtype,
 						complete: function (jqXHR, textStatus) {
-							$self.jqGrid("progressBar", { method: "hide", loadtype: o.saveui, htmlcontent: o.savetext });
+							$self.jqGrid("progressBar", { method: "hide", loadtype: o.saveui });
 							// textStatus can be "abort", "timeout", "error", "parsererror" or some text from text part of HTTP error occurs
 							// see the answer http://stackoverflow.com/a/3617710/315935 about xhr.readyState === 4 && xhr.status === 0
 							if ((jqXHR.status < 300 || jqXHR.status === 304) && (jqXHR.status !== 0 || jqXHR.readyState !== 4)) {
@@ -15084,7 +15103,6 @@
 							}
 						},
 						error: function (res, stat, err) {
-							$("#lui_" + jgrid.jqID(p.id)).hide();
 							$self.triggerHandler("jqGridInlineErrorSaveRow", [rowid, res, stat, err, o]);
 							if (isFunction(o.errorfunc)) {
 								o.errorfunc.call($t, rowid, res, stat, err);
@@ -15437,7 +15455,207 @@
 	 * depends on jQuery UI
 	**/
 	// begin module grid.jqueryui
-	var $UiMultiselect = $.ui != null ? $.ui.multiselect : null;
+	var $UiMultiselect = $.ui != null ? $.ui.multiselect : null,
+		reorderSelectedColumns = function (iColItem) {
+			/* Background information:
+			 *
+			 * Multiselect contains the list of selected items this.selectedList,
+			 * which is jQuery wrapper of <ul> element.
+			 * The items of this.selectedList are <li> elements, which represent
+			 * visible (hidden:false) and movable (hidedlg:false) columns of the grid.
+			 * Additionally there are exist hidden <select multiple="multiple">.
+			 * Every <option> of the <select> corresponds the column of the grid.
+			 * The visible columns (hidden:false) are selected. The value of the <option>
+			 * contains the column index (iCol) in colModel.
+			 * <li> elements has data with the "optionLink" pointed to the corresponding
+			 * option of the hidden select.
+			 * this.grid is the DOM of the grid and this.newColOrder is the array with
+			 * ALL column names in the order, which should be applied after reordering
+			 * the grid. Additionally this.gh contains the COPY of p.groupHeader.groupHeaders.
+			 * It's important that startColumnName property of elements of
+			 * p.groupHeader.groupHeaders could be changed during reordering of the columns.
+			 * On the other side the user can't click Cancel button of columnChooser for
+			 * breaking reordering. Because of that this.gh contains the COPY of
+			 * p.groupHeader.groupHeaders and the original p.groupHeader.groupHeaders will be
+			 * not changed in the reorderSelectedColumns function */
+			if (this.grid != null && this.grid.p != null) {
+				var that = this, p = this.grid.p, iCol, j, iGrp, ghItem,
+					gh = this.gh, selectedList = this.selectedList,
+					items = selectedList.find("li"),
+					optionLink, headerItem, //iColOld,
+					inGroup = new Array(p.colModel.length), // allocate array with undefined values
+					indexOfAddedItem = items.length - 1,
+					enumSelected = function (callback, startIndex, reverse) {
+						var i, opt, items = selectedList.find("li");
+						if (startIndex === undefined) {
+							startIndex = reverse ? items.length - 1 : 0;
+						}
+						for (i = startIndex; !reverse ? i < items.length : i >= 0; !reverse ? i++ : i--) {
+							opt = $(items[i]).data("optionLink");
+							if (opt && callback.call(items[i], parseInt(opt.val(), 10), i)) {
+								return i;
+							}
+						}
+					},
+					enumPreviousAndInsertAfter = function (iCol) {
+						if (inGroup[iCol] === inGroup[iColItem]) {
+							$(this).after(items[indexOfAddedItem]);
+							updateNewColOrder();
+							return true; // stop enumeration
+						}
+					},
+					enumNextAndInsertBefore = function (iCol) {
+						if (inGroup[iCol] === inGroup[iColItem]) {
+							$(this).before(items[indexOfAddedItem]);
+							updateNewColOrder();
+							return true; // stop enumeration
+						}
+					},
+					updateStartColumn = function (iCol) {
+						if (inGroup[iCol] === inGroup[iColItem] && inGroup[iCol] !== undefined) {
+							gh[inGroup[iCol]].startColumnName = p.colModel[iCol].name;
+							return true; // stop enumeration
+						}
+					},
+					updateNewColOrder = function () {
+						// !!! the function set additionally indexOfAddedItem and update items
+
+						// remove iColItem from this.newColOrder
+						j = $.inArray(p.colModel[iColItem].name, that.newColOrder);
+						if (j >= 0) {
+							that.newColOrder.splice(j, 1);
+						}
+
+						// refill items
+						items = selectedList.find("li");
+
+						// iCol will be the index in newColOrder. The order of columns in items
+						// should be mostly THE SAME like in selectedList, but newColOrder
+						// contains additional elements (hidden and hidedlg). The array items
+						// on the other side contains just inserted iColItem element.
+
+						// we need find indexOfAddedItem - the index of <li> with iColItem
+						// in the list of this.selectedList.find("li") elements
+						iCol = 0;
+						enumSelected(
+							function (iColOld, index) {
+								if (iColOld === iColItem) {
+									indexOfAddedItem = index;
+									// if iColItem is in the same header group as p.colModel[iCol] or
+									// both belongs no header group then the column could be NOT in
+									// selectedList. I find better to insert the item AFTER the hidden
+									// or non-movable columns (like "rn", "subgrid" column or other)
+									while (iCol >= 0 && !p.colModel[iCol].hidden && p.colModel[iCol].hidedlg &&
+											//inGroup[iCol] !== undefined && inGroup[iColItem] !== undefined &&
+											inGroup[iCol] === inGroup[iColItem]) {
+										iCol++;
+									}
+									that.newColOrder.splice(iCol, 0, p.colModel[iColItem].name);
+									return true; // stop enumeration
+								}
+								// selectedList contains SUBSET of columns from colModel, but newColOrder
+								// contains ALL columns. It's important that all columns from selectedList
+								// exist in newColOrder IN THE SAME order. Thus iCol will be the current
+								// index in newColOrder array with p.colModel[iColOld].name column name.
+								iCol = $.inArray(p.colModel[iColOld].name, that.newColOrder, iCol);
+								if (iCol < 0) {
+									// to be sure that the code works in case of some errors too
+									iCol = $.inArray(p.colModel[iColOld].name, that.newColOrder);
+								}
+								iCol++;
+							}
+						);
+					};
+
+				// First of all we fill the helper array inGroup. It contains
+				// an item for every column. The value is undefined if the column
+				// not belongs to a header group and it is 0-based index of the
+				// header group (the index in gh array) if the column belongs to
+				// a header group. The array inGroup helps us to detect whether
+				// two columns belong to the same group or not.
+				if (gh) {
+					for (iGrp = 0; iGrp < gh.length; iGrp++) {
+						headerItem = gh[iGrp];
+						for (iCol = 0; iCol < headerItem.numberOfColumns; iCol++) {
+							inGroup[p.iColByName[headerItem.startColumnName] + iCol] = iGrp;
+						}
+					}
+				}
+
+				// Fix potition of added/moved item iColItem in that.newColOrder array.
+				// We syncronize only the initial state of newColOrder. The position of
+				// iColItem item can be changed later in both selectedList and newColOrder
+				updateNewColOrder();
+
+				if (gh && gh[inGroup[iColItem]] !== undefined) {
+					// the item belong to some group
+					ghItem = gh[inGroup[iColItem]];
+					for (j = 0; j < ghItem.numberOfColumns; j++) {
+						iCol = p.iColByName[ghItem.startColumnName] + j;
+						if (!p.colModel[iCol].hidden && !p.colModel[iCol].hidedlg) {
+							// the columns are displayed in the selectedList
+
+							// We need to enumerate items in reverse order and to find the index of the item
+							// in the array items comparing the items by $(items[j]).data("optionLink").val()
+							// If the item is found then append prevously found item AFTER this one.
+							// We can use j variable bacause the outer loop will be exit (see break below)
+							enumSelected(
+								enumPreviousAndInsertAfter,
+								indexOfAddedItem - 1,
+								true // enum in reverse order
+							);
+							// If step 2 didn't find the group then we need examin NEXT items and find
+							// the items from the same group. We should test the items in sequential order
+							// after the item found. If the item is found then apend prevously found
+							// item BEFORE this one.
+							enumSelected(
+								enumNextAndInsertBefore,
+								indexOfAddedItem + 1
+							);
+							// fix the name of the first column in the group
+							enumSelected(updateStartColumn);
+							break; // !!!
+						}
+					}
+				} else if (gh) {
+					// The item from no group is added/moved.
+					// We have to verify that the item is not dropped inside of some header group
+					// find the index of added/moved element in this.selectedList.find("li")
+					items = selectedList.find("li");
+					j = enumSelected(function (iCol) {
+						if (iCol === iColItem) {
+							return true;
+						}
+					});
+					if (j + 1 >= items.length || j < 0) {
+						return;
+					}
+					optionLink = $(items[j + 1]).data("optionLink");
+					if (optionLink) {
+						iGrp = inGroup[parseInt(optionLink.val(), 10)];
+						if (iGrp !== undefined) {
+							optionLink = $(items[j - 1]).data("optionLink");
+							if (optionLink && inGroup[parseInt(optionLink.val(), 10)] === iGrp) {
+								// The next and the previous items are in the same group, but
+								// the added/moved item in NOT in the group.
+								// We have to move the item items[j] AFTER the last item of the group.
+								var iColNotInTheGroup = enumSelected(
+									function (iCol) {
+										if (inGroup[iCol] !== iGrp) {
+											return true; // stop enumeration
+										}
+									},
+									j + 1 // start enumeration with the index
+								);
+								$(items[iColNotInTheGroup >= items.length ? items.length - 1 : iColNotInTheGroup - 1])
+									.after(items[indexOfAddedItem]);
+								updateNewColOrder();
+							}
+						}
+					}
+				}
+			}
+		};
 	if (jgrid.msie && jgrid.msiever() === 8) {
 		$.expr[":"].hidden = function (elem) {
 			return elem.offsetWidth === 0 || elem.offsetHeight === 0 ||
@@ -15450,12 +15668,22 @@
 		if ($UiMultiselect.prototype._setSelected) {
 			var setSelected = $UiMultiselect.prototype._setSelected;
 			$UiMultiselect.prototype._setSelected = function (item, selected) {
-				var self = this, ret = setSelected.call(self, item, selected);
-				if (selected && self.selectedList) {
-					var elt = self.element;
-					self.selectedList.find("li").each(function () {
-						if ($(self).data("optionLink")) {
-							$(self).data("optionLink").remove().appendTo(elt);
+				// the method will be called if the user clicks "+" button on the item of "available" list
+				// or if the user clicks "-" button on the item of "selected" list.
+				// The parameter "selected" is equal true on click on the item of "selected" list
+				// and false on click on the item of "available" list.
+				var ret = setSelected.call(this, item, selected), elt = this.element,
+					iColItem = parseInt(item.data("optionLink").val(), 10);
+				if (selected && this.selectedList) {
+					// reorder items of selectedList
+					// all items of selectedList from one group have to be together
+					// all items of availableList from one group have to be together
+					reorderSelectedColumns.call(this, iColItem);
+
+					// apply the new sort order to the original selectbox
+					this.selectedList.find("li").each(function () {
+						if ($(this).data("optionLink")) {
+							$(this).data("optionLink").remove().appendTo(elt);
 						}
 					});
 				}
@@ -15540,7 +15768,8 @@
 			});
 		},
 		columnChooser: function (opts) {
-			var $self = this, self = $self[0], p = self.p, selector, select, colMap = {}, fixedCols = [], dopts, mopts, $dialogContent, multiselectData, listHeight,
+			var $self = this, self = $self[0], p = self.p, selector, select, dopts, mopts,
+				$dialogContent, multiselectData, listHeight,
 				colModel = p.colModel, nCol = colModel.length, colNames = p.colNames,
 				getMultiselectWidgetData = function ($elem) {
 					return ($UiMultiselect && $UiMultiselect.prototype && $elem.data($UiMultiselect.prototype.widgetFullName || $UiMultiselect.prototype.widgetName)) ||
@@ -15551,17 +15780,6 @@
 			selector = $('<div id="colchooser_' + p.id + '" style="position:relative;overflow:hidden"><div><select multiple="multiple"></select></div></div>');
 			select = $("select", selector);
 
-			function insert(perm, i, v) {
-				var a, b;
-				if (i >= 0) {
-					a = perm.slice();
-					b = a.splice(i, Math.max(perm.length - i, i));
-					if (i > perm.length) { i = perm.length; }
-					a[i] = v;
-					return a.concat(b);
-				}
-				return perm;
-			}
 			function call(fn, obj) {
 				if (!fn) { return; }
 				if (typeof fn === "string") {
@@ -15578,7 +15796,7 @@
 				height: 240,
 				classname: null,
 				done: function (perm) {
-					if (perm && p.groupHeader == null) {
+					if (perm) {
 						$self.jqGrid("remapColumns", perm, true);
 					}
 				},
@@ -15641,12 +15859,19 @@
 				/* Function to get the permutation array, and pass it to the
 				   "done" function */
 				apply_perm: function () {
-					var perm = [],
+					var perm = new Array(p.colModel.length), i, gHead,
 						showHideColOptions = {
 							notSkipFrozen: opts.notSkipFrozen === undefined ? false : opts.notSkipFrozen,
 							skipSetGridWidth: true,
 							skipSetGroupHeaders: true
 						};
+
+					// we can use remapColumnsByName instead of remapColumns in general,
+					// but we try to hold the compatibility with old version. Thus we
+					// fill perm based on multiselectData.newColOrder
+					for (i = 0; i < p.colModel.length; i++) {
+						perm[i] = p.iColByName[multiselectData.newColOrder[i]];
+					}
 
 					$("option", select).each(function () {
 						if ($(this).is(":selected")) {
@@ -15655,10 +15880,15 @@
 							$self.jqGrid("hideCol", colModel[this.value].name, showHideColOptions);
 						}
 					});
+
+					if (opts.done) {
+						opts.done.call($self, perm);
+					}
 					if (p.groupHeader && (typeof p.groupHeader === "object" || $.isFunction(p.groupHeader))) {
 						$self.jqGrid("destroyGroupHeader", false);
+						p.groupHeader.groupHeaders = multiselectData.gh; // use modified groupHeader
 						if (p.pivotOptions != null && p.pivotOptions.colHeaders != null && p.pivotOptions.colHeaders.length > 1) {
-							var i, gHead = p.pivotOptions.colHeaders;
+							gHead = p.pivotOptions.colHeaders;
 							for (i = 0; i < gHead.length; i++) {
 								// Multiple calls of setGroupHeaders for one grid are wrong,
 								// but there are produces good results in case of usage
@@ -15671,17 +15901,6 @@
 						} else {
 							$self.jqGrid("setGroupHeaders", p.groupHeader);
 						}
-					}
-
-					//fixedCols.slice(0);
-					$("option", select).filter(":selected").each(function () { perm.push(parseInt(this.value, 10)); });
-					$.each(perm, function () { delete colMap[colModel[parseInt(this, 10)].name]; });
-					$.each(colMap, function () {
-						var ti = parseInt(this, 10);
-						perm = insert(perm, ti, ti);
-					});
-					if (opts.done) {
-						opts.done.call($self, perm);
 					}
 					$self.jqGrid("setGridWidth",
 						!p.autowidth && (p.widthOrg === undefined || p.widthOrg === "auto" || p.widthOrg === "100%") ? p.tblwidth : p.width,
@@ -15730,11 +15949,12 @@
 			}
 
 			select.empty();
-			var gh = p.groupHeader, colHeader = {}, k, j, l, iCol, ghItem;
+			var gh = p.groupHeader != null ? p.groupHeader.groupHeaders : 0,
+				colHeader = {}, k, j, iCol, ghItem;
 			// fill colHeader for columns which have column header
-			if (gh != null && gh.groupHeaders != null) {
-				for (k = 0, l = gh.groupHeaders.length; k < l; k++) {
-					ghItem = gh.groupHeaders[k];
+			if (gh) {
+				for (k = 0; k < gh.length; k++) {
+					ghItem = gh[k];
 					for (j = 0; j < ghItem.numberOfColumns; j++) {
 						iCol = p.iColByName[ghItem.startColumnName] + j;
 						colHeader[iCol] = $.isFunction(opts.buildItemText) ?
@@ -15765,17 +15985,11 @@
 				}
 			}
 			$.each(colModel, function (i) {
-
-				colMap[this.name] = i;
-				if (this.hidedlg) {
-					if (!this.hidden) {
-						fixedCols.push(i);
-					}
-					return;
+				if (!this.hidedlg) {
+					select.append("<option value='" + i + "'" +
+						(p.headertitles || this.headerTitle ? (" title='" + jgrid.stripHtml(typeof this.headerTitle === "string" ? this.headerTitle : colHeader[i]) + "'") : "") +
+						(this.hidden ? "" : " selected='selected'") + ">" + colHeader[i] + "</option>");
 				}
-				select.append("<option value='" + i + "'" +
-					(p.headertitles || this.headerTitle ? (" title='" + jgrid.stripHtml(typeof this.headerTitle === "string" ? this.headerTitle : colHeader[i]) + "'") : "") +
-					(this.hidden ? "" : " selected='selected'") + ">" + colHeader[i] + "</option>");
 			});
 
 			dopts = $.isFunction(opts.dlog_opts) ? opts.dlog_opts.call($self, opts) : opts.dlog_opts;
@@ -15791,6 +16005,14 @@
 
 			multiselectData = getMultiselectWidgetData(select);
 			if (multiselectData) {
+				// grid property will be used to access the grid inside of _setSelected
+				multiselectData.grid = self;
+				if (p.groupHeader != null) {
+					// make deep copy of groupHeaders to be able to hold changes of startColumnName,
+					// but to apply the changes only after the user click OK button (not Cancel)
+					multiselectData.gh = $.extend(true, [], p.groupHeader.groupHeaders);
+				}
+				multiselectData.newColOrder = $.map(colModel, function (cm) { return cm.name; });
 				multiselectData.container.css({ width: "100%", height: "100%", margin: "auto" });
 
 				multiselectData.selectedContainer.css({ width: multiselectData.options.dividerLocation * 100 + "%", height: "100%", margin: "auto", boxSizing: "border-box" });
@@ -15803,6 +16025,25 @@
 				listHeight = Math.min(listHeight, $(window).height());
 				multiselectData.selectedList.css("height", listHeight);
 				multiselectData.availableList.css("height", listHeight);
+				if (multiselectData.options != null && multiselectData.options.sortable) {
+					multiselectData.selectedList.bind("sortupdate", function (e, ui) {
+						// remove fixed inline style values of width and height
+						// added during gragging
+						if (gh) {
+							reorderSelectedColumns.call(
+								multiselectData,
+								parseInt(ui.item.data("optionLink").val(), 10)
+							);
+						}
+						ui.item.css({ width: "", height: "" });
+						if ($.isFunction(opts.sortUpdate)) {
+							opts.sortUpdate.call(self, e, ui);
+						}
+					});
+				}
+				if ($.isFunction(opts.init)) {
+					opts.init.call(self, multiselectData);
+				}
 			}
 		},
 		sortableRows: function (opts) {
@@ -15854,13 +16095,20 @@
 						}
 					};
 					$($t).sortable(opts);
-					if ($.isFunction($.fn.disableSelection)) {
+					/*if ($.isFunction($.fn.disableSelection)) {
 						// The method disableSelection exists starting with jQuery UI 1.6,
 						// but it's declared as deprecated since jQuery UI 1.9
 						// see http://jqueryui.com/upgrade-guide/1.9/#deprecated-disableselection-and-enableselection
 						// so we use disableSelection only if it exists
-						$($t.tBodies[0]).children("tr.jqgrow").disableSelection();
-					}
+						var jQueryUiVersion = $.ui != null && typeof $.ui.version === "string" ?
+								$.ui.version.match(/(\d+)\.(\d+).(\d+)/) : [];
+						// jQuery UI version is: jQueryUiVersion[1].jQueryUiVersion[2].jQueryUiVersion[3]
+						if (jQueryUiVersion.length === 4 && jQueryUiVersion[1] === "1" &&
+							jQueryUiVersion[2] > 5 && jQueryUiVersion[2] < 9) {
+							// disable selection only for old jQuery UI
+							$($t.tBodies[0]).children("tr.jqgrow").disableSelection();
+						}
+					}*/
 				}
 			});
 		},
@@ -17021,6 +17269,9 @@
 								(subgridTableClasses ? " style='width:1px' role='presentation' class='" + subgridTableClasses + "'" : "") +
 								"><thead></thead><tbody></tbody></table>"),
 							$tr = $("<tr></tr>");
+
+						ts.grid.endReq.call(ts);
+
 						for (i = 0; i < cm.name.length; i++) {
 							$th = $("<th class='" + thSubgridClasses + "'></th>")
 									.html(cm.name[i])
@@ -17030,8 +17281,6 @@
 						$tr.appendTo($table[0].tHead);
 						fullBody(sjxml, $($table[0].tBodies[0]));
 						$("#" + jqID(p.id + "_" + sbid)).append($table);
-						ts.grid.hDiv.loading = false;
-						$("#load_" + jqID(p.id)).hide();
 						return false;
 					},
 					populatesubgrid = function (rd) {
@@ -17049,8 +17298,7 @@
 							}
 						}
 						if (!ts.grid.hDiv.loading) {
-							ts.grid.hDiv.loading = true;
-							$("#load_" + jqID(p.id)).show();
+							ts.grid.beginReq.call(ts);
 							if (!p.subgridtype) {
 								p.subgridtype = p.datatype;
 							}
@@ -17069,7 +17317,6 @@
 										context: sid,
 										data: jgrid.serializeFeedback.call(ts, p.serializeSubGridData, "jqGridSerializeSubGridData", dp),
 										success: function (data) {
-											$(ts.grid.eDiv).hide();
 											subGridXmlOrJson(
 												data,
 												this,
@@ -17080,6 +17327,8 @@
 											var loadError = p.loadSubgridError === undefined ?
 													p.loadError :
 													p.loadSubgridError;
+
+											ts.grid.endReq.call(ts);
 											if ($.isFunction(loadError)) {
 												loadError.call(ts, jqXHR, textStatus, errorThrown);
 											}
@@ -17090,9 +17339,6 @@
 													this,
 													p.subgridtype === "xml" ? fillXmlBody : fillJsonBody
 												);
-											} else {
-												ts.grid.hDiv.loading = false;
-												$("#load_" + jqID(p.id)).hide();
 											}
 										}
 									}, jgrid.ajaxOptions, p.ajaxSubgridOptions || {}));

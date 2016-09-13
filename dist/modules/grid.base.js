@@ -2,13 +2,13 @@
 // @compilation_level SIMPLE_OPTIMIZATIONS
 
 /**
- * @license jqGrid 4.13.4-pre - free jqGrid: https://github.com/free-jqgrid/jqGrid
+ * @license jqGrid 4.13.5-pre - free jqGrid: https://github.com/free-jqgrid/jqGrid
  * Copyright (c) 2008-2014, Tony Tomov, tony@trirand.com
  * Copyright (c) 2014-2016, Oleg Kiriljuk, oleg.kiriljuk@ok-soft-gmbh.com
  * Dual licensed under the MIT and GPL licenses
  * http://www.opensource.org/licenses/mit-license.php
  * http://www.gnu.org/licenses/gpl-2.0.html
- * Date: 2016-06-17
+ * Date: 2016-09-05
  */
 //jsHint options
 /*jshint eqnull:true */
@@ -353,7 +353,7 @@
 
 	$.extend(true, jgrid, {
 		/** @const */
-		version: "4.13.4-pre",
+		version: "4.13.5-pre",
 		/** @const */
 		productName: "free jqGrid",
 		defaults: {},
@@ -1247,11 +1247,11 @@
 			}
 			switch (componentName) {
 				case COMPONENT_NAMES.BODY_TABLE: // get body table from bDiv
-					return $p.hasClass("ui-jqgrid-bdiv") ? $p.find(">div>.ui-jqgrid-btable") : $();
+					return $p.hasClass("ui-jqgrid-bdiv") ? $p.children("div").children(".ui-jqgrid-btable") : $();
 				case COMPONENT_NAMES.HEADER_TABLE: // header table from bDiv
-					return $p.hasClass("ui-jqgrid-hdiv") ? $p.find(">div>.ui-jqgrid-htable") : $();
+					return $p.hasClass("ui-jqgrid-hdiv") ? $p.children("div").children(".ui-jqgrid-htable") : $();
 				case COMPONENT_NAMES.FOOTER_TABLE: // footer/summary table from sDiv
-					return $p.hasClass("ui-jqgrid-sdiv") ? $p.find(">div>.ui-jqgrid-ftable") : $();
+					return $p.hasClass("ui-jqgrid-sdiv") ? $p.children("div").children(".ui-jqgrid-ftable") : $();
 				case COMPONENT_NAMES.FROZEN_HEADER_TABLE: // header table from bDiv
 					return $p.hasClass("ui-jqgrid-hdiv") ? $p.children(".ui-jqgrid-htable") : $();
 				case COMPONENT_NAMES.FROZEN_FOOTER_TABLE: // footer/summary table from sDiv
@@ -2079,6 +2079,21 @@
 						_sorting.push({ by: by, dir: dir, type: stype, datefmt: dfmt, sfunc: sfunc });
 						return self;
 					};
+					this.inSet = function (f, v, t) {
+						var val = v === undefined ? null : v,
+							swst = t.stype === undefined ? "text" : t.stype;
+
+						val = self._getStr("\"" + self._toStr(val) + "\"");
+						if (swst !== "text") {
+							// NOT yet implemented
+							return self._compareValues(self.equals, f, v, "==", t);
+						}
+
+						self._append("jQuery.inArray(" + self._getStr(f) + "," + val + ".split(',')) >= 0");
+						self._setCommand(self.inSet, f);
+						self._resetNegate();
+						return self;
+					};
 					this.custom = function (ruleOp, field, data) {
 						self._append("self.p.customSortOperations." + ruleOp + ".filter.call(self,{item:this,cmName:\"" + field + "\",searchValue:\"" + data + "\"})");
 						self._setCommand(self.custom, field);
@@ -2236,13 +2251,15 @@
 					return "<td role='gridcell' " + formatCol(pos, irow, v, srvr, rowId, rdata) + ">" + v + "</td>";
 				},
 				addMulti = function (rowid, pos, irow, checked, item) {
-					var checkboxHtml = "&nbsp;", hasCbox = true;
+					var checkboxHtml = "&nbsp;", hasCbox = true,
+						callbackParams = { rowid: rowid, iRow: irow, iCol: pos, data: item, checked: checked };
 					if ($.isFunction(p.hasMultiselectCheckBox)) {
-						hasCbox = p.hasMultiselectCheckBox.call(self,
-								{ rowid: rowid, iRow: irow, iCol: pos, data: item });
+						hasCbox = p.hasMultiselectCheckBox.call(self, callbackParams);
 					}
 					if (hasCbox) {
-						checkboxHtml = "<input type='checkbox'" + " id='jqg_" + p.id + "_" + rowid +
+						checkboxHtml = $.isFunction(p.checkboxHtml) ?
+							p.checkboxHtml.call(self, callbackParams) :
+							"<input type='checkbox' id='jqg_" + p.id + "_" + rowid +
 							"' class='cbox' name='jqg_" + p.id + "_" + rowid + "'" +
 							(checked ? " checked='checked' aria-checked='true'" : " aria-checked='false'") + "/>";
 					}
@@ -2270,6 +2287,8 @@
 					} else {
 						selr = (idr === p.selrow);
 					}
+				} else {
+					selr = false;
 				}
 				iStartTrTag = rowData.length;
 				rowData.push(""); // it will be replaced. See rowData[iStartTrTag] below
@@ -3916,8 +3935,8 @@
 							"bn": function (queryObj, op) { return op === "OR" ? queryObj.orNot().startsWith : queryObj.andNot().startsWith; },
 							"en": function (queryObj, op) { return op === "OR" ? queryObj.orNot().endsWith : queryObj.andNot().endsWith; },
 							"ew": function (queryObj) { return queryObj.endsWith; },
-							"ni": function (queryObj, op) { return op === "OR" ? queryObj.orNot().equals : queryObj.andNot().equals; },
-							"in": function (queryObj) { return queryObj.equals; },
+							"ni": function (queryObj, op) { return op === "OR" ? queryObj.orNot().inSet : queryObj.andNot().inSet; },
+							"in": function (queryObj) { return queryObj.inSet; },
 							"nu": function (queryObj) { return queryObj.isNull; },
 							"nn": function (queryObj, op) { return op === "OR" ? queryObj.orNot().isNull : queryObj.andNot().isNull; }
 						},
@@ -6085,29 +6104,29 @@
 			}
 			options = options || {};
 			this.each(function () {
-				var $t = this, p = $t.p, getall = false, ind, len = 2, j = 0, rows = $t.rows, i, $td, cm, nm, td;
+				var $t = this, p = $t.p, getall = false, tr, len = 1, j, rows = $t.rows, i, $td, cm, nm, td;
 				if (rowid === undefined) {
 					getall = true;
 					resall = [];
 					len = rows.length;
 				} else {
-					ind = base.getGridRowById.call($($t), rowid);
-					if (!ind) { return res; }
+					tr = base.getGridRowById.call($($t), rowid);
+					if (!tr) { return res; }
 				}
-				while (j < len) {
-					if (getall) { ind = rows[j]; }
-					if ($(ind).hasClass("jqgrow")) {
-						$td = $("td[role=gridcell]", ind);
+				for (j = 0; j < len; j++) {
+					if (getall) { tr = rows[j]; }
+					if ($(tr).hasClass("jqgrow")) {
+						$td = $(tr).find("td[role=gridcell]");
 						for (i = 0; i < $td.length; i++) {
 							cm = p.colModel[i];
 							nm = cm.name;
-							if (nm !== "cb" && nm !== "subgrid" && nm !== "rn" && cm.formatter !== "actions" && (!options.skipHidden || !cm.hidden)) {
+							if ($.inArray(nm, p.reservedColumnNames) < 0 && cm.formatter !== "actions" && (!options.skipHidden || !cm.hidden)) {
 								td = $td[i];
 								if (p.treeGrid === true && nm === p.ExpandColumn) {
 									res[nm] = htmlDecode($("span", td).first().html());
 								} else {
 									try {
-										res[nm] = $.unformat.call($t, td, { rowId: ind.id, colModel: cm }, i);
+										res[nm] = $.unformat.call($t, td, { rowId: tr.id, colModel: cm }, i);
 									} catch (exception) {
 										res[nm] = htmlDecode($(td).html());
 									}
@@ -6115,11 +6134,13 @@
 							}
 						}
 						if (options.includeId && (p.keyName === false || res[p.keyName] == null)) {
-							res[p.prmNames.id] = stripPref(p.idPrefix, ind.id);
+							res[p.prmNames.id] = stripPref(p.idPrefix, tr.id);
 						}
-						if (getall) { resall.push(res); res = {}; }
+						if (getall) {
+							resall.push(res);
+							res = {};
+						}
 					}
-					j++;
 				}
 			});
 			return resall || res;
