@@ -1,7 +1,7 @@
 /**
  * jqGrid extension - Tree Grid
  * Copyright (c) 2008-2014, Tony Tomov, tony@trirand.com
- * Copyright (c) 2014-2016, Oleg Kiriljuk, oleg.kiriljuk@ok-soft-gmbh.com
+ * Copyright (c) 2014-2017, Oleg Kiriljuk, oleg.kiriljuk@ok-soft-gmbh.com
  * Dual licensed under the MIT and GPL licenses:
  * http://www.opensource.org/licenses/mit-license.php
  * http://www.gnu.org/licenses/gpl-2.0.html
@@ -9,15 +9,34 @@
 
 /*jshint eqeqeq:false */
 /*jslint browser: true, eqeq: true, plusplus: true, nomen: true, unparam: true, vars: true, white: true, todo: true */
-/*global jQuery, define */
+/*global jQuery, define, exports, module, require */
 (function (factory) {
 	"use strict";
 	if (typeof define === "function" && define.amd) {
 		// AMD. Register as an anonymous module.
-		define(["jquery", "./grid.base"], factory);
-	} else if (typeof exports === "object") {
+		define([
+			"jquery",
+			"./grid.base"
+		], factory);
+	} else if (typeof module === "object" && module.exports) {
 		// Node/CommonJS
-		factory(require("jquery"));
+		module.exports = function (root, $) {
+			if (!root) {
+				root = window;
+			}
+			if ($ === undefined) {
+				// require("jquery") returns a factory that requires window to
+				// build a jQuery instance, we normalize how we use modules
+				// that require this pattern but the window provided is a noop
+				// if it's defined (how jquery works)
+				$ = typeof window !== "undefined" ?
+						require("jquery") :
+						require("jquery")(root);
+			}
+			require("./grid.base");
+			factory($);
+			return $;
+		};
 	} else {
 		// Browser globals
 		factory(jQuery);
@@ -68,8 +87,8 @@
 						}
 					};
 
-				$self.unbind("jqGridBeforeSelectRow.setTreeNode");
-				$self.bind("jqGridBeforeSelectRow.setTreeNode", beforeSelectRow);
+				$self.off("jqGridBeforeSelectRow.setTreeNode");
+				$self.on("jqGridBeforeSelectRow.setTreeNode", beforeSelectRow);
 
 			});
 		},
@@ -402,8 +421,15 @@
 					var id = getAccessor(rc, p.localReader.id);
 					if (!treeGridFeedback.call($t, "beforeCollapseNode", { rowid: id, item: rc })) { return; }
 					rc[expanded] = false;
-					var rc1 = $("#" + p.idPrefix + jqID(id), $t.grid.bDiv)[0];
-					$("div.treeclick", rc1).removeClass(p.treeIcons.minus + " tree-minus").addClass(p.treeIcons.commonIconClass).addClass(p.treeIcons.plus + " tree-plus");
+					$("#" + p.idPrefix + jqID(id), $t.grid.bDiv) // $tr
+						.find("div.treeclick")
+						.removeClass(p.treeIcons.minus + " tree-minus")
+						.addClass(p.treeIcons.commonIconClass)
+						.addClass(p.treeIcons.plus + " tree-plus");
+					if (p.unloadNodeOnCollapse === true || ($.isFunction(p.unloadNodeOnCollapse) && p.unloadNodeOnCollapse.call($t, rc))) {
+						rc[p.treeReader.loaded] = false;
+						$($t).jqGrid("delTreeNode", id, true);
+					}
 					treeGridFeedback.call($t, "afterCollapseNode", { rowid: id, item: rc });
 				}
 			});
@@ -453,7 +479,7 @@
 			});
 			return success;
 		},
-		delTreeNode: function (rowid) {
+		delTreeNode: function (rowid, skipSelf) {
 			return this.each(function () {
 				var $t = this, p = $t.p, myright, width, res, key, rid = p.localReader.id, i, $self = $($t),
 					left = p.treeReader.left_field,
@@ -467,7 +493,9 @@
 					var dr = base.getFullTreeNode.call($self, p.data[rc]);
 					if (dr.length > 0) {
 						for (i = 0; i < dr.length; i++) {
-							base.delRowData.call($self, dr[i][rid]);
+							if (!skipSelf || rowid !== dr[i][rid]) {
+								base.delRowData.call($self, dr[i][rid]);
+							}
 						}
 					}
 					if (p.treeGridModel === "nested") {
@@ -497,24 +525,18 @@
 			});
 		},
 		addChildNode: function (nodeid, parentid, data, expandData) {
-			//return this.each(function(){
-			var $self = $(this), $t = $self[0], p = $t.p, getInd = base.getInd;
-			if (data) {
-				// we suppose tha the id is autoincremet and
-				var method, parentindex, parentdata, parentlevel, i, len, max = 0, rowind = parentid, leaf, maxright,
+			return this.each(function () {
+				if (!data) { return; }
+				var $t = this, p = $t.p, $self = $($t), getInd = base.getInd,
+					method, parentindex, parentdata, parentlevel, iRow, rowind = parentid, leaf, maxright,
 					expanded = p.treeReader.expanded_field, isLeaf = p.treeReader.leaf_field, level = p.treeReader.level_field,
-					//icon = p.treeReader.icon_field,
 					parent = p.treeReader.parent_id_field,
 					left = p.treeReader.left_field,
 					right = p.treeReader.right_field,
 					loaded = p.treeReader.loaded;
 				if (expandData === undefined) { expandData = false; }
 				if (nodeid == null) {
-					i = p.data.length - 1;
-					if (i >= 0) {
-						while (i >= 0) { max = Math.max(max, parseInt(p.data[i][p.localReader.id], 10)); i--; }
-					}
-					nodeid = max + 1;
+					nodeid = jgrid.randId();
 				}
 				var prow = getInd.call($self, parentid);
 				leaf = false;
@@ -524,13 +546,12 @@
 					rowind = null;
 					method = "last";
 					parentlevel = p.tree_root_level;
-					i = p.data.length + 1;
 				} else {
 					method = "after";
 					parentindex = p._index[parentid];
 					parentdata = p.data[parentindex];
 					parentid = parentdata[p.localReader.id];
-					i = getInd.call($self, parentid);
+					iRow = getInd.call($self, parentid);
 					parentlevel = parseInt(parentdata[level], 10) + 1;
 					var childs = base.getFullTreeNode.call($self, parentdata);
 					// if there are child nodes get the last index of it
@@ -540,13 +561,12 @@
 						for (iChild = 0; iChild < childs.length; iChild++) {
 							childId = childs[iChild][p.localReader.id];
 							iChildRow = getInd.call($self, childId);
-							if (iChildRow > i) {
-								i = iChildRow;
+							if (iChildRow > iRow) {
+								iRow = iChildRow;
 								rowind = childId;
 							}
 						}
 					}
-					i++; // the next row after the parent or the last child
 					// if the node is leaf
 					if (parentdata[isLeaf]) {
 						leaf = true;
@@ -560,7 +580,6 @@
 						parentdata[loaded] = true;
 					}
 				}
-				len = i + 1;
 
 				if (data[expanded] === undefined) { data[expanded] = false; }
 				if (data[loaded] === undefined) { data[loaded] = false; }
@@ -617,15 +636,13 @@
 				}
 				if (parentid === null || base.isNodeLoaded.call($self, parentdata) || leaf) {
 					base.addRowData.call($self, nodeid, data, method, rowind);
-					base.setTreeNode.call($self, i, len);
 				}
 				if (parentdata && !parentdata[expanded] && expandData) {
 					$($t.rows[prow])
 						.find("div.treeclick")
 						.click();
 				}
-			}
-			//});
+			});
 		}
 	});
 	// end module grid.treegrid
